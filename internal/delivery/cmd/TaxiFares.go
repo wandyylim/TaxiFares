@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	taxifares "TaxiFares/internal/usecase/TaxiFares"
 	constant "TaxiFares/model/constant"
 	"TaxiFares/model/entity"
+	"errors"
+	"log"
 
 	"bufio"
 	"fmt"
@@ -14,95 +15,121 @@ import (
 	"time"
 )
 
-func TaxiFares(taxiFaresUC *taxifares.TaxiFaresUsecase) {
+func (d *CmdDelivery) TaxiFares() {
 
-	scanner := bufio.NewScanner(os.Stdin)
-	var records []entity.Record
-	var prevTime time.Time
-	var prevDistance float64
+	for {
+		scanner := bufio.NewScanner(os.Stdin)
+		var (
+			records      []entity.Record
+			prevTime     time.Time
+			prevDistance float64
+			err          error
+		)
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				break
+			}
+
+			//validate input
+			timeVal, distance, traveledDistance, err := d.validateInput(line, prevTime, prevDistance)
+			if err != nil {
+				fmt.Println("error validating input: ", err)
+				log.Printf("error validating input: %v", err)
+				continue
+			}
+
+			record := entity.Record{
+				Time:     timeVal,
+				Distance: distance,
+				Diff:     traveledDistance,
+			}
+			records = append(records, record)
+
+			prevTime = timeVal
+			prevDistance = distance
+
+		}
+
+		if errScanner := scanner.Err(); errScanner != nil {
 			continue
 		}
 
-		parts := strings.Split(line, " ")
-		if len(parts) != 2 {
-			fmt.Fprintln(os.Stderr, "Invalid input format:", line)
-			os.Exit(1)
-		}
-
-		timeStr := parts[0]
-		distanceStr := parts[1]
-
-		timeVal, err := time.Parse("15:04:05.000", timeStr)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error parsing time:", err)
-			os.Exit(1)
-		}
-
-		distance, err := strconv.ParseFloat(distanceStr, 64)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error parsing distance:", err)
-			os.Exit(1)
 			continue
 		}
 
-		elapsedTime := timeVal.Sub(prevTime).Minutes()
-
-		if elapsedTime <= 0 {
-			fmt.Fprintln(os.Stderr, "Invalid time interval:", elapsedTime, "minutes")
-			os.Exit(1)
+		//validate must have 2 lines data
+		if len(records) < 2 {
+			fmt.Println("need at least two records")
+			log.Print("need at least two records")
+			continue
 		}
 
-		if elapsedTime > constant.MaxInterval {
-			fmt.Fprintln(os.Stderr, "Time interval exceeds maximum allowed:", elapsedTime, "minutes")
-			os.Exit(1)
+		if records[len(records)-1].Distance == 0 {
+			fmt.Println("total mileage is 0.0m")
+			log.Print("total mileage is 0.0m")
+			continue
 		}
 
-		traveledDistance := distance - prevDistance
+		fare := d.taxiFaresUc.CalculateFare(records[len(records)-1].Distance)
+		fmt.Println(fare)
 
-		if traveledDistance < 0 {
-			fmt.Fprintln(os.Stderr, "Invalid distance:", traveledDistance, "meters")
-			os.Exit(1)
+		sort.Slice(records, func(i, j int) bool {
+			return records[i].Diff > records[j].Diff
+		})
+
+		for _, record := range records {
+			fmt.Printf("%s %.1f %.1f\n", record.Time.Format("15:04:05.000"), record.Distance, record.Diff)
 		}
 
-		record := entity.Record{
-			Time:     timeVal,
-			Distance: distance,
-			Diff:     traveledDistance,
-		}
-		records = append(records, record)
+	}
+}
 
-		prevTime = timeVal
-		prevDistance = distance
+func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistance float64) (timeVal time.Time, distance, traveledDistance float64, err error) {
+	parts := strings.Split(input, " ")
+	if len(parts) != 2 {
+		err = errors.New("invalid input format")
+		return
 	}
 
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error reading standard input:", err)
-		os.Exit(1)
+	timeStr := parts[0]
+	distanceStr := parts[1]
+
+	//parse elapsed time
+	timeVal, err = time.Parse("15:04:05.000", timeStr)
+	if err != nil {
+		err = errors.New("error parsing time")
+		return
 	}
 
-	if len(records) < 2 {
-		fmt.Fprintln(os.Stderr, "Insufficient data. Need at least two records.")
-		os.Exit(1)
+	//parse mileage
+	distance, err = strconv.ParseFloat(distanceStr, 64)
+	if err != nil {
+		err = errors.New("error parsing distance")
+		return
 	}
 
-	if records[0].Distance == 0 {
-		fmt.Fprintln(os.Stderr, "Total mileage is 0.0m")
-		os.Exit(1)
+	elapsedTime := timeVal.Sub(prevTime).Minutes()
+
+	// check past time
+	if elapsedTime <= 0 && !prevTime.IsZero() {
+		err = fmt.Errorf("invalid time interval: %v minutes", elapsedTime)
+		return
 	}
 
-	fare := taxiFaresUC.CalculateFare(records[len(records)-1].Time.Sub(records[0].Time).Minutes(), records[len(records)-1].Distance)
-	fmt.Println(fare)
+	// check interval more than 5 minutes apart
+	if elapsedTime > constant.MaxInterval {
+		err = fmt.Errorf("time interval exceeds maximum allowed: %v minutes", elapsedTime)
+		return
+	}
 
-	sort.Slice(records, func(i, j int) bool {
-		return records[i].Diff > records[j].Diff
-	})
+	traveledDistance = distance - prevDistance
 
-	for _, record := range records {
-		fmt.Printf("%s %.1f %.1f\n", record.Time.Format("15:04:05.000"), record.Distance, record.Diff)
+	if traveledDistance < 0 {
+		err = fmt.Errorf("invalid distance: %v meters", traveledDistance)
+		return
 	}
 
 	return

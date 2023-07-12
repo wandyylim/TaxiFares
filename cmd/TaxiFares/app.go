@@ -19,10 +19,14 @@ func main() {
 	//init usecasd
 	taxifaresUC, err := taxifaresUC.New()
 	if err != nil {
-		log.Fatal("test")
+		log.Fatal("failed init taxifares usecase")
 	}
-	log.Fatal("test")
 
-	cmdDelivery.TaxiFares(taxifaresUC)
+	//init delivery
+	cmdDelivery, err := cmdDelivery.New(taxifaresUC)
+	if err != nil {
+		log.Fatal("failed init cmd delivery")
+	}
 
+	cmdDelivery.TaxiFares()
 }

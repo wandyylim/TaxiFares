@@ -2,36 +2,35 @@ package taxifares
 
 import (
 	constant "TaxiFares/model/constant"
+	"math"
 )
 
-func (uc *TaxiFaresUsecase) CalculateFare(elapsedTime, traveledDistance float64) int {
-	fare := constant.BaseFare
+func (uc *TaxiFaresUsecase) CalculateFare(traveledDistance float64) (fare float64) {
 
 	if traveledDistance > 0 {
 		distance := traveledDistance
 
-		if distance <= constant.Distance1 {
-			fare += int(distance / constant.Distance1 * constant.DistanceRate1)
-		} else {
-			fare += int(constant.Distance1 / constant.Distance1 * constant.DistanceRate1)
-
-			distance -= constant.Distance1
-			fare += int(distance / constant.Distance2 * constant.DistanceRate2)
-		}
+		fare = uc.calculateFare(distance)
 	}
 
-	// Fare per minute calculation
-	farePerMinute := float64(fare) / elapsedTime
-	farePerMinute = uc.round(farePerMinute, 0.01)
-
-	// Adding the minimum fare per minute
-	minimumFarePerMinute := float64(constant.BaseFare) / 60
-	farePerMinute += minimumFarePerMinute
-
-	return int(farePerMinute * elapsedTime)
+	return fare
 
 }
 
-func (uc *TaxiFaresUsecase) round(value, unit float64) float64 {
-	return float64(int((value/unit)+0.5)) * unit
+func (uc *TaxiFaresUsecase) calculateFare(distance float64) float64 {
+	baseFare := constant.BaseFare
+
+	// if distance less than 1km
+	if distance <= 1000.0 {
+		return baseFare
+	} else if distance <= 10000.0 {
+		// if distance more than 1km but less than 10km
+		additionalCharge := math.Ceil(distance/constant.Distance1) * constant.DistanceRate1
+		return baseFare + additionalCharge
+	} else {
+		// over 10km
+		additionalCharge := (10000.0 / constant.Distance1) * constant.DistanceRate1                   // Additional charge up to 10 km
+		additionalCharge += math.Ceil((distance-10000.0)/constant.Distance2) * constant.DistanceRate2 // Additional charge beyond 10 km
+		return baseFare + additionalCharge
+	}
 }
