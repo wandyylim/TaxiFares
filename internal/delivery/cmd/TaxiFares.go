@@ -29,16 +29,17 @@ func (d *CmdDelivery) TaxiFares() {
 			line := scanner.Text()
 			if line == "" {
 				break
+			} else if line == "exit" {
+				os.Exit(1)
 			}
 
 			//validate input
-			prevTime, prevDistance, _, err = d.validateInput(line, prevTime, prevDistance, records)
+			prevTime, prevDistance, records, err = d.validateInput(line, prevTime, prevDistance, records)
 			if err != nil {
 				fmt.Println("error validating input: ", err)
 				log.Printf("error validating input: %v", err)
 				continue
 			}
-
 		}
 
 		if errScanner := scanner.Err(); errScanner != nil || err != nil {
@@ -54,7 +55,7 @@ func (d *CmdDelivery) TaxiFares() {
 	}
 }
 
-func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistance float64, records []entity.Record) (timeVal time.Time, distance, traveledDistance float64, err error) {
+func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistance float64, record []entity.Record) (timeVal time.Time, distance float64, records []entity.Record, err error) {
 
 	//validate the part have time and mileage
 	parts := strings.Split(input, " ")
@@ -97,7 +98,7 @@ func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistan
 	}
 
 	//get travel distance
-	traveledDistance = distance - prevDistance
+	traveledDistance := distance - prevDistance
 
 	//validate the travel distance not in decrease value
 	if traveledDistance < 0 {
@@ -105,12 +106,12 @@ func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistan
 		return
 	}
 
-	record := entity.Record{
+	rec := entity.Record{
 		Time:     timeVal,
 		Distance: distance,
 		Diff:     traveledDistance,
 	}
-	records = append(records, record)
+	records = append(record, rec)
 
 	return
 }
@@ -139,6 +140,6 @@ func (d *CmdDelivery) processInput(records []entity.Record) (err error) {
 	for _, record := range records {
 		fmt.Printf("%s %.1f %.1f\n", record.Time.Format("15:04:05.000"), record.Distance, record.Diff)
 	}
-
+	fmt.Print("\n\n")
 	return
 }

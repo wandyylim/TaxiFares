@@ -23,13 +23,13 @@ func TestCmdDelivery_validateInput(t *testing.T) {
 		records      []entity.Record
 	}
 	tests := []struct {
-		name                 string
-		d                    *CmdDelivery
-		args                 args
-		wantTimeVal          time.Time
-		wantDistance         float64
-		wantTraveledDistance float64
-		wantErr              bool
+		name         string
+		d            *CmdDelivery
+		args         args
+		wantTimeVal  time.Time
+		wantDistance float64
+		wantRecords  []entity.Record
+		wantErr      bool
 	}{
 		{
 			name: "tc1 invalid input",
@@ -96,9 +96,8 @@ func TestCmdDelivery_validateInput(t *testing.T) {
 				prevTime:     time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
 				prevDistance: 2.0,
 			},
-			wantTimeVal:          time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
-			wantTraveledDistance: -2,
-			wantErr:              true,
+			wantTimeVal: time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
+			wantErr:     true,
 		},
 		{
 			name: "tc7 sucess",
@@ -110,15 +109,21 @@ func TestCmdDelivery_validateInput(t *testing.T) {
 				prevTime:     time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
 				prevDistance: 0.0,
 			},
-			wantTimeVal:          time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
-			wantTraveledDistance: 5,
-			wantDistance:         5,
-			wantErr:              false,
+			wantTimeVal:  time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
+			wantDistance: 5,
+			wantRecords: []entity.Record{
+				{
+					Time:     time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
+					Distance: 5,
+					Diff:     5,
+				},
+			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotTimeVal, gotDistance, gotTraveledDistance, err := tt.d.validateInput(tt.args.input, tt.args.prevTime, tt.args.prevDistance, tt.args.records)
+			gotTimeVal, gotDistance, gotRecords, err := tt.d.validateInput(tt.args.input, tt.args.prevTime, tt.args.prevDistance, tt.args.records)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CmdDelivery.validateInput() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -129,8 +134,8 @@ func TestCmdDelivery_validateInput(t *testing.T) {
 			if gotDistance != tt.wantDistance {
 				t.Errorf("CmdDelivery.validateInput() gotDistance = %v, want %v", gotDistance, tt.wantDistance)
 			}
-			if gotTraveledDistance != tt.wantTraveledDistance {
-				t.Errorf("CmdDelivery.validateInput() gotTraveledDistance = %v, want %v", gotTraveledDistance, tt.wantTraveledDistance)
+			if !reflect.DeepEqual(gotRecords, tt.wantRecords) {
+				t.Errorf("CmdDelivery.validateInput() gotRecords = %v, want %v", gotRecords, tt.wantRecords)
 			}
 		})
 	}

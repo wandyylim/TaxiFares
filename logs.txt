@@ -1,9 +1,0 @@
-2023/07/13 01:36:37 error validating input: invalid time interval: -527040 minutes
-2023/07/13 01:36:41 error validating input: invalid time interval: -527038.99795 minutes
-2023/07/13 01:36:45 error validating input: invalid time interval: -527037.9979166667 minutes
-2023/07/13 01:36:48 error validating input: invalid time interval: -527036.9983333333 minutes
-2023/07/13 01:37:25 need at least two records
-2023/07/13 01:37:25 need at least two records
-2023/07/13 01:37:25 need at least two records
-2023/07/13 01:37:25 need at least two records
-2023/07/13 01:37:25 need at least two records

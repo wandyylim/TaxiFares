@@ -9,4 +9,4 @@ go run cmd\TaxiFares\app.go
 1. Insert elapsed time and mileage
 2. Insert more record by press enter then insert again
 3. if empty string / "" is input. The apps will continue to calculate the fare.
-4. 
+4. type "exit" to exit the application
