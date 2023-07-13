@@ -1,67 +1,217 @@
 package cmd
 
 import (
-	"bufio"
-	"fmt"
-	"os"
+	mockUC "TaxiFares/internal/mocks/usecase"
+	"TaxiFares/model/entity"
+	"reflect"
 	"testing"
+	"time"
+
+	"github.com/golang/mock/gomock"
 )
 
-// func TestCmdDelivery_TaxiFares(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
+func TestCmdDelivery_validateInput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-// 	mockTaxiFaresUc := mockUC.NewMockITaxeFares(ctrl)
+	mockTaxiFaresUc := mockUC.NewMockITaxeFares(ctrl)
 
-// 	tests := []struct {
-// 		name  string
-// 		input string
-// 		d     *CmdDelivery
-// 		mock  func()
-// 	}{
-// 		{
-// 			name:  "",
-// 			input: "10:00:00.000 2.5\n10:05:00.000 3.1\n10:10:00.000 4.0\n\n",
-// 			d: &CmdDelivery{
-// 				taxiFaresUc: mockTaxiFaresUc,
-// 			},
-// 			mock: func() {
-// 				mockTaxiFaresUc.EXPECT().CalculateFare(gomock.Any()).Return(0.0)
-// 			},
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			tt.mock()
-
-// 			// Redirect os.Stdin to a pipe
-// 			oldStdin := os.Stdin
-// 			defer func() { os.Stdin = oldStdin }()
-
-// 			r, w, _ := os.Pipe()
-// 			os.Stdin = r
-
-// 			// Write the test input to the pipe
-// 			_, _ = w.Write([]byte(tt.input))
-// 			_ = w.Close()
-
-// 			tt.d.TaxiFares()
-// 		})
-// 	}
-// }
-
-func TestCmdDelivery_TaxiFares(t *testing.T) {
-	scanner := bufio.NewScanner(os.Stdin)
-	msg := "Your name please? Press the Enter key when done"
-	fmt.Fprintln(os.Stdout, msg)
-
-	scanner.Scan()
-	if err := scanner.Err(); err != nil {
-		t.Fatal(err)
+	type args struct {
+		input        string
+		prevTime     time.Time
+		prevDistance float64
+		records      []entity.Record
 	}
-	name := scanner.Text()
-	if len(name) == 0 {
-		t.Log("empty input")
+	tests := []struct {
+		name                 string
+		d                    *CmdDelivery
+		args                 args
+		wantTimeVal          time.Time
+		wantDistance         float64
+		wantTraveledDistance float64
+		wantErr              bool
+	}{
+		{
+			name: "tc1 invalid input",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input: "wronginput",
+			},
+			wantErr: true,
+		},
+		{
+			name: "tc2 error parsing time",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input: "00:00:009.000 0.0",
+			},
+			wantErr: true,
+		},
+		{
+			name: "tc3 error parsing distance",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input: "00:00:00.000 asd",
+			},
+			wantTimeVal: time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
+			wantErr:     true,
+		},
+		{
+			name: "tc4 invalid time interval",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input:    "00:00:00.000 0.0",
+				prevTime: time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
+			},
+			wantTimeVal: time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
+			wantErr:     true,
+		},
+		{
+			name: "tc5 interval exceeds limit",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input:    "01:00:00.000 0.0",
+				prevTime: time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
+			},
+			wantTimeVal: time.Date(0, 1, 1, 1, 0, 0, 0, time.UTC),
+			wantErr:     true,
+		},
+		{
+			name: "tc6 travel distance 0",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input:        "00:01:00.000 0.0",
+				prevTime:     time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
+				prevDistance: 2.0,
+			},
+			wantTimeVal:          time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
+			wantTraveledDistance: -2,
+			wantErr:              true,
+		},
+		{
+			name: "tc7 sucess",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				input:        "00:01:00.000 5.0",
+				prevTime:     time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),
+				prevDistance: 0.0,
+			},
+			wantTimeVal:          time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC),
+			wantTraveledDistance: 5,
+			wantDistance:         5,
+			wantErr:              false,
+		},
 	}
-	t.Logf("You entered: %s\n", name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotTimeVal, gotDistance, gotTraveledDistance, err := tt.d.validateInput(tt.args.input, tt.args.prevTime, tt.args.prevDistance, tt.args.records)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CmdDelivery.validateInput() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotTimeVal, tt.wantTimeVal) {
+				t.Errorf("CmdDelivery.validateInput() gotTimeVal = %v, want %v", gotTimeVal, tt.wantTimeVal)
+			}
+			if gotDistance != tt.wantDistance {
+				t.Errorf("CmdDelivery.validateInput() gotDistance = %v, want %v", gotDistance, tt.wantDistance)
+			}
+			if gotTraveledDistance != tt.wantTraveledDistance {
+				t.Errorf("CmdDelivery.validateInput() gotTraveledDistance = %v, want %v", gotTraveledDistance, tt.wantTraveledDistance)
+			}
+		})
+	}
+}
+
+func TestCmdDelivery_processInput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockTaxiFaresUc := mockUC.NewMockITaxeFares(ctrl)
+
+	type args struct {
+		records []entity.Record
+	}
+	tests := []struct {
+		name    string
+		d       *CmdDelivery
+		args    args
+		wantErr bool
+		mock    func()
+	}{
+		{
+			name: "tc1 records less than 2",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				records: []entity.Record{},
+			},
+			mock:    func() {},
+			wantErr: true,
+		},
+		{
+			name: "tc2 total mileages is 0",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				records: []entity.Record{
+					{
+						Distance: 0,
+						Diff:     0,
+					},
+					{
+						Distance: 0,
+						Diff:     0,
+					},
+				},
+			},
+			mock:    func() {},
+			wantErr: true,
+		},
+		{
+			name: "tc2 total mileages is 0",
+			d: &CmdDelivery{
+				taxiFaresUc: mockTaxiFaresUc,
+			},
+			args: args{
+				records: []entity.Record{
+					{
+						Distance: 0,
+						Diff:     0,
+					},
+					{
+						Distance: 5,
+						Diff:     5,
+					},
+				},
+			},
+			wantErr: false,
+			mock: func() {
+				mockTaxiFaresUc.EXPECT().CalculateFare(gomock.Any()).Return(400.0)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mock()
+			if err := tt.d.processInput(tt.args.records); (err != nil) != tt.wantErr {
+				t.Errorf("CmdDelivery.processInput() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

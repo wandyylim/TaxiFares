@@ -19,12 +19,11 @@ func (d *CmdDelivery) TaxiFares() {
 
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
-		var (
-			records      []entity.Record
-			prevTime     time.Time
-			prevDistance float64
-			err          error
-		)
+
+		var records []entity.Record
+		var prevTime time.Time
+		var prevDistance float64
+		var err error
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -33,67 +32,38 @@ func (d *CmdDelivery) TaxiFares() {
 			}
 
 			//validate input
-			timeVal, distance, traveledDistance, err := d.validateInput(line, prevTime, prevDistance)
+			prevTime, prevDistance, _, err = d.validateInput(line, prevTime, prevDistance, records)
 			if err != nil {
 				fmt.Println("error validating input: ", err)
 				log.Printf("error validating input: %v", err)
 				continue
 			}
 
-			record := entity.Record{
-				Time:     timeVal,
-				Distance: distance,
-				Diff:     traveledDistance,
-			}
-			records = append(records, record)
-
-			prevTime = timeVal
-			prevDistance = distance
-
 		}
 
-		if errScanner := scanner.Err(); errScanner != nil {
-			continue
+		if errScanner := scanner.Err(); errScanner != nil || err != nil {
+			return
 		}
 
+		err = d.processInput(records)
 		if err != nil {
-			continue
-		}
-
-		//validate must have 2 lines data
-		if len(records) < 2 {
-			fmt.Println("need at least two records")
-			log.Print("need at least two records")
-			continue
-		}
-
-		if records[len(records)-1].Distance == 0 {
-			fmt.Println("total mileage is 0.0m")
-			log.Print("total mileage is 0.0m")
-			continue
-		}
-
-		fare := d.taxiFaresUc.CalculateFare(records[len(records)-1].Distance)
-		fmt.Println(fare)
-
-		sort.Slice(records, func(i, j int) bool {
-			return records[i].Diff > records[j].Diff
-		})
-
-		for _, record := range records {
-			fmt.Printf("%s %.1f %.1f\n", record.Time.Format("15:04:05.000"), record.Distance, record.Diff)
+			fmt.Println("error processing input: ", err)
+			log.Printf("error processing input: %v", err)
 		}
 
 	}
 }
 
-func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistance float64) (timeVal time.Time, distance, traveledDistance float64, err error) {
+func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistance float64, records []entity.Record) (timeVal time.Time, distance, traveledDistance float64, err error) {
+
+	//validate the part have time and mileage
 	parts := strings.Split(input, " ")
 	if len(parts) != 2 {
 		err = errors.New("invalid input format")
 		return
 	}
 
+	//split into 2 part
 	timeStr := parts[0]
 	distanceStr := parts[1]
 
@@ -111,6 +81,7 @@ func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistan
 		return
 	}
 
+	//compare current time with prev time
 	elapsedTime := timeVal.Sub(prevTime).Minutes()
 
 	// check past time
@@ -125,11 +96,48 @@ func (d *CmdDelivery) validateInput(input string, prevTime time.Time, prevDistan
 		return
 	}
 
+	//get travel distance
 	traveledDistance = distance - prevDistance
 
+	//validate the travel distance not in decrease value
 	if traveledDistance < 0 {
 		err = fmt.Errorf("invalid distance: %v meters", traveledDistance)
 		return
+	}
+
+	record := entity.Record{
+		Time:     timeVal,
+		Distance: distance,
+		Diff:     traveledDistance,
+	}
+	records = append(records, record)
+
+	return
+}
+
+func (d *CmdDelivery) processInput(records []entity.Record) (err error) {
+	//validate must have 2 lines data
+	if len(records) < 2 {
+		err = errors.New("need at least two records")
+		fmt.Println(err)
+		return
+	}
+
+	if records[len(records)-1].Distance == 0 {
+		err = errors.New("total mileage is 0.0m")
+		fmt.Println(err)
+		return
+	}
+
+	fare := d.taxiFaresUc.CalculateFare(records[len(records)-1].Distance)
+	fmt.Println("fare : ", fare)
+
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].Diff > records[j].Diff
+	})
+
+	for _, record := range records {
+		fmt.Printf("%s %.1f %.1f\n", record.Time.Format("15:04:05.000"), record.Distance, record.Diff)
 	}
 
 	return
